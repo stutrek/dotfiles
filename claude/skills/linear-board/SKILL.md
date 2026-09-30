@@ -9,8 +9,8 @@ GitHub is the source of truth. Linear is a view of it that this skill rewrites; 
 
 ## Layout
 
-- **Project:** `Stu's board` in the Engineering team, lead Stu. Everything lives here.
-- **Milestone = workstream** (the thing Stu is actually working on). Examples: Prowork eval, Flow edit lock, Canvas perf, PubNub removal, Step-auth guardrail, Sentry fixes, Tooling / misc. A workstream can hold several stacks (flow editing has a "of 5" and an "of 6" stack).
+- **Project:** `Stu's board` (P-ENG-252, https://linear.app/parabola/project/stus-board-63d069e8c2a4) in the Engineering team, lead Stu. Everything lives here.
+- **Milestone = workstream** (the thing Stu is actually working on). Current ones: Prowork eval, Flow edit lock, Flow run conflicts, Canvas perf, PubNub removal, Step-auth guardrail, Flow copy, Worker hardening, Help desk fixes, Tooling / misc, Sentry fixes, Parked. A workstream can hold several stacks.
 - **Issue = one stack**, or one standalone PR. Title is the workstream-level description in plain words, not the PR title.
 - **Status** (Engineering's shared workflow — don't add statuses):
   - `Todo` — every open PR in it is a draft
@@ -21,17 +21,22 @@ GitHub is the source of truth. Linear is a view of it that this skill rewrites; 
 
 ## Sync procedure
 
-1. Run the script from inside the repo checkout:
+1. Run the scripts from inside the repo checkout:
    ```bash
    python3 ~/.claude/skills/linear-board/stacks.py > /tmp/stacks.json
+   python3 ~/.claude/skills/linear-board/render.py < /tmp/stacks.json > /tmp/issues.json
    ```
-   It prints `{stacks: [...]}`. Each stack has `key` (e.g. `canvas/6`, or `pr/16538` for a standalone PR), `status`, `open` PRs bottom-first with a `state` each, `merged` PRs, `tickets`, `needs_review_request` (a PR number or null), `needs_my_changes`, `ci_failing`, and per-PR `greptile_flagged`. The review rule is already applied — don't recompute it.
+   `render.py` produces, per stack, the exact `description` to write (marker line included), plus `state`, `needs_review_request` and `relatedTo`. Pass descriptions through verbatim — don't hand-write tables.
+
+   `stacks.py` prints `{stacks: [...]}`. Each stack has `key` (e.g. `canvas/6`, or `pr/16538` for a standalone PR), `status`, `open` PRs bottom-first with a `state` each, `merged` PRs, `tickets`, `needs_review_request` (a PR number or null), `needs_my_changes`, `ci_failing`, and per-PR `greptile_flagged`. The review rule is already applied — don't recompute it.
 2. Load the board: `list_issues` with project `Stu's board` (include `description`, `status`, `labels`, `projectMilestone`). Each issue's description starts with a marker line `<!-- board-key: <key> -->`; match stacks to issues by that key only.
 3. For each stack:
-   - **Existing issue:** replace the description body (keep the marker), set status, add or remove `needs-review-request`, append new ticket relations.
+   - **Existing issue:** if the rendered description differs from the current one (ignore the "Synced from GitHub" date and Linear's escaping of `#`, `[`, `]`, `_` and `<url>` links), replace it; set status; add or remove `needs-review-request` with `addLabels`/`removeLabels`; append new ticket relations with `relatedTo`.
    - **New stack:** pick its milestone. If an existing milestone clearly fits (same scope, same ticket, same subject), use it. Otherwise **ask Stu** — list the new stacks together in one question with a suggested milestone for each, rather than one question per stack. Then create the issue with the marker, assignee `me`, the milestone, status and label.
-   - Attach each PR as a link (`links: [{url, title: "#123 …"}]`) — append-only, so only add ones not already attached.
-4. Issues whose key no longer appears in the output: if the stack's PRs are merged, set `Done`; if they were closed unmerged, set `Canceled`. Check with `gh pr view` before changing status.
+   - **Don't** attach PRs as issue links/attachments. Linear's GitHub integration treats attached PRs as linked and can auto-move the issue (e.g. to Done when the first PR merges), which fights this sync. The description table already links every PR.
+4. Issues whose key no longer appears in the output: first check the PRs in their table with `gh pr view`.
+   - Still open → the stack was **restacked** (e.g. `flow editing/5` became part of `flow editing/6` on 2026-09-30). Find the new key those PRs now belong to. If that key has no issue yet, re-key this issue (rewrite it with the new description) instead of creating a new one. If it already has one, set this one `Duplicate` of it.
+   - All merged → `Done`. All closed unmerged → `Canceled`.
 5. Report back in a few lines: what needs a review request (PR number + one-line title + stack), what needs Stu's changes, what has failing CI, and any new stacks placed. Link the board.
 
 ## Description format

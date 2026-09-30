@@ -56,7 +56,7 @@ def ci_state(rollup):
     checks = [(c.get("name") or c.get("context") or "?", (c.get("conclusion") or c.get("state") or "").upper()) for c in rollup or []]
     greptile = any(n == GREPTILE_CHECK and st in FAILING for n, st in checks)
     checks = [(n, st) for n, st in checks if n not in REVIEW_CHECKS and n != GREPTILE_CHECK]
-    failing = sorted(n for n, st in checks if st in FAILING)
+    failing = sorted({n for n, st in checks if st in FAILING})
     if failing:
         return "failing", failing, greptile
     if any(st in PENDING for _, st in checks):
