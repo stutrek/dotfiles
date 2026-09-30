@@ -2,7 +2,8 @@
 """Render each stack from stacks.py into the Linear issue description the board uses.
 
 Usage: stacks.py | render.py > issues.json
-Each entry: key, state, needs_review_request, relatedTo, description.
+Each entry: key, progress (title suffix like " (3 of 7)", empty for single PRs),
+state, needs_review_request, relatedTo, links (every PR, for attachments), description.
 """
 import json, re, sys, datetime
 d = json.load(sys.stdin)
@@ -33,6 +34,9 @@ for s in d["stacks"]:
     desc = "\n".join([f"<!-- board-key: {s['key']} -->", head + nxt, "", "| # | PR | State | CI |", "|---|----|-------|----|", *[r[1] for r in rows], ""]
         + ([f"Related: {', '.join(s['tickets'])}", ""] if s["tickets"] else [])
         + [f"_Synced from GitHub {today}. Edits here are overwritten._"])
-    out.append({"key": s["key"], "state": s["status"], "needs_review_request": bool(s["needs_review_request"]), "relatedTo": s["tickets"], "description": desc})
+    progress = f" ({len(s['merged'])} of {s['total']})" if s["stacked"] else ""
+    prs = sorted(s["merged"] + s["open"], key=lambda x: x.get("n") or 0)
+    links = [{"url": x["url"], "title": f"#{x['number']} {short(x['title'])}"} for x in prs]
+    out.append({"key": s["key"], "progress": progress, "state": s["status"], "needs_review_request": bool(s["needs_review_request"]), "relatedTo": s["tickets"], "links": links, "description": desc})
 json.dump(out, sys.stdout, indent=1)
 print()

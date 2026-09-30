@@ -11,7 +11,8 @@ GitHub is the source of truth. Linear is a view of it that this skill rewrites; 
 
 - **Project:** `Stu's board` (P-ENG-252, https://linear.app/parabola/project/stus-board-63d069e8c2a4) in the Engineering team, lead Stu. Everything lives here.
 - **Milestone = workstream** (the thing Stu is actually working on). Current ones: Prowork eval, Flow edit lock, Flow run conflicts, Canvas perf, PubNub removal, Step-auth guardrail, Flow copy, Worker hardening, Help desk fixes, Tooling / misc, Sentry fixes, Parked. A workstream can hold several stacks.
-- **Issue = one stack**, or one standalone PR. Title is the workstream-level description in plain words, not the PR title.
+- **Issue = one stack**, or one standalone PR. Title is `<stack title> (<merged> of <total>)`, e.g. `Canvas perf: stop rebuilding styles on every render (1 of 6)`. The stack title is a plain-words description chosen when the issue is created; the progress suffix is rewritten on every sync (render.py's `progress`). Single PRs have no suffix.
+- **Attachments:** every PR in the stack, merged and open, is attached to the issue so Linear shows its PR panel.
 - **Status** (Engineering's shared workflow — don't add statuses):
   - `Todo` — every open PR in it is a draft
   - `In Review` — at least one open PR is out of draft
@@ -26,14 +27,15 @@ GitHub is the source of truth. Linear is a view of it that this skill rewrites; 
    python3 ~/.claude/skills/linear-board/stacks.py > /tmp/stacks.json
    python3 ~/.claude/skills/linear-board/render.py < /tmp/stacks.json > /tmp/issues.json
    ```
-   `render.py` produces, per stack, the exact `description` to write (marker line included), plus `state`, `needs_review_request` and `relatedTo`. Pass descriptions through verbatim — don't hand-write tables.
+   `render.py` produces, per stack, the exact `description` to write (marker line included), plus `progress`, `state`, `needs_review_request`, `relatedTo` and `links` (every PR). Pass descriptions through verbatim — don't hand-write tables.
 
    `stacks.py` prints `{stacks: [...]}`. Each stack has `key` (e.g. `canvas/6`, or `pr/16538` for a standalone PR), `status`, `open` PRs bottom-first with a `state` each, `merged` PRs, `tickets`, `needs_review_request` (a PR number or null), `needs_my_changes`, `ci_failing`, and per-PR `greptile_flagged`. The review rule is already applied — don't recompute it.
-2. Load the board: `list_issues` with project `Stu's board` (include `description`, `status`, `labels`, `projectMilestone`). Each issue's description starts with a marker line `<!-- board-key: <key> -->`; match stacks to issues by that key only.
+2. Load the board: `list_issues` with project `Stu's board` (include `title`, `description`, `status`, `labels`, `projectMilestone`). Each issue's description starts with a marker line `<!-- board-key: <key> -->`; match stacks to issues by that key only.
 3. For each stack:
-   - **Existing issue:** if the rendered description differs from the current one (ignore the "Synced from GitHub" date and Linear's escaping of `#`, `[`, `]`, `_` and `<url>` links), replace it; set status; add or remove `needs-review-request` with `addLabels`/`removeLabels`; append new ticket relations with `relatedTo`.
+   - **Existing issue:** strip any trailing ` (N of M)` from the current title to get the stack title, and set the title to stack title + `progress` if it changed. If the rendered description differs from the current one (ignore the "Synced from GitHub" date and Linear's escaping of `#`, `[`, `]`, `_` and `<url>` links), replace it; set status; add or remove `needs-review-request` with `addLabels`/`removeLabels`; append new ticket relations with `relatedTo`.
    - **New stack:** pick its milestone. If an existing milestone clearly fits (same scope, same ticket, same subject), use it. Otherwise **ask Stu** — list the new stacks together in one question with a suggested milestone for each, rather than one question per stack. Then create the issue with the marker, assignee `me`, the milestone, status and label.
-   - **Don't** attach PRs as issue links/attachments. Linear's GitHub integration treats attached PRs as linked and can auto-move the issue (e.g. to Done when the first PR merges), which fights this sync. The description table already links every PR.
+   - **Attach PRs:** pass only the `links` whose URL isn't already among the issue's attachments (`get_issue` returns `attachments`; `links` is append-only, so resending creates duplicates). Linear rate-limits link attachments — roughly 40 in a burst. On a "Ratelimit exceeded" warning, wait a couple of minutes and retry just the missing ones; the rest of the save still succeeds.
+   - Linear's GitHub integration can auto-move an issue when an attached PR merges. The status this sync sets wins — always set status from `state`, even if it looks unchanged.
 4. Issues whose key no longer appears in the output: first check the PRs in their table with `gh pr view`.
    - Still open → the stack was **restacked** (e.g. `flow editing/5` became part of `flow editing/6` on 2026-09-30). Find the new key those PRs now belong to. If that key has no issue yet, re-key this issue (rewrite it with the new description) instead of creating a new one. If it already has one, set this one `Duplicate` of it.
    - All merged → `Done`. All closed unmerged → `Canceled`.
