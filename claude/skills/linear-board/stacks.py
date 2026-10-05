@@ -47,7 +47,8 @@ def parse_title(title):
 def tickets(*texts):
     found = set()
     for t in texts:
-        found.update(x for x in TICKET_RE.findall(t or "") if not x.startswith("NOTICKET"))
+        # "PR-03h"-style stack labels look like tickets but aren't.
+        found.update(x for x in TICKET_RE.findall(t or "") if not x.startswith(("NOTICKET", "PR-")))
     return sorted(found)
 
 
@@ -218,7 +219,7 @@ def main():
             {
                 "key": key,
                 "scope": p["scope"] if p else None,
-                "total": p["m"] if p else 1,
+                "total": p["m"] if p else len(g),
                 "stacked": bool(p) or len(g) > 1,
                 "status": "Todo" if all(x["isDraft"] for x in g) else "In Review",
                 "tickets": tickets(*[x["title"] for x in g], *[x["headRefName"] for x in g], *[m["title"] for m in merged]),
